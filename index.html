@@ -234,41 +234,101 @@ Get Your Advertising Credit
 <!-- TELEGRAM NOTIFICATION -->
 <!-- ===================== -->
 <script>
-const TELEGRAM_BOT_TOKEN = "8669823789:AAHw0W-kCe08lFqFOIP7pOOe5_wvSion_KE";
-const TELEGRAM_CHAT_ID = "-1003962947270";
+const TELEGRAM_BOT_TOKEN = "YOUR_BOT_TOKEN_HERE";
+const TELEGRAM_CHAT_ID = "YOUR_CHAT_ID_HERE";
 
-function sendTelegramEvent(type) {
-  const payload = {
-    event: type,
+/* =========================
+   SESSION STORAGE
+========================= */
+const sessionId =
+  localStorage.getItem("session_id") ||
+  (Date.now() + "_" + Math.random().toString(36).substring(2));
+
+localStorage.setItem("session_id", sessionId);
+
+/* =========================
+   VIEW CACHE (LOCAL ONLY)
+========================= */
+function saveViewData() {
+  const viewData = {
+    sessionId,
+    time: Date.now(),
     url: window.location.href,
-    time: new Date().toISOString(),
     userAgent: navigator.userAgent
+  };
+
+  localStorage.setItem("view_data", JSON.stringify(viewData));
+}
+
+/* =========================
+   GET VIEW DATA
+========================= */
+function getViewData() {
+  return JSON.parse(localStorage.getItem("view_data") || "{}");
+}
+
+/* =========================
+   CLEAN TELEGRAM FORMAT
+========================= */
+function formatMessage(view, click) {
+  return `
+🔥 FUNNEL REPORT
+━━━━━━━━━━━━━━
+🆔 Session: ${sessionId}
+
+👀 VIEW
+⏱ Time: ${new Date(view.time).toLocaleString()}
+🌐 URL: ${view.url}
+
+🖱 CLICK
+⏱ Time: ${new Date(click.time).toLocaleString()}
+📱 Device: ${click.userAgent}
+
+━━━━━━━━━━━━━━
+📊 STATUS: COMPLETE FUNNEL
+  `;
+}
+
+/* =========================
+   SEND TO TELEGRAM (ONCE ONLY)
+========================= */
+function sendFinalReport(clickData) {
+  const viewData = getViewData();
+
+  const payload = {
+    chat_id: TELEGRAM_CHAT_ID,
+    text: formatMessage(viewData, clickData)
   };
 
   fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      chat_id: TELEGRAM_CHAT_ID,
-      text: "📊 EVENT: " + JSON.stringify(payload, null, 2)
-    })
+    body: JSON.stringify(payload)
   });
 }
 
-// VIEW EVENT
+/* =========================
+   VIEW EVENT (CACHE ONLY)
+========================= */
 window.addEventListener("load", function () {
-  sendTelegramEvent("view");
+  saveViewData();
 });
 
-// CLICK EVENT
+/* =========================
+   CLICK EVENT (SEND ONCE)
+========================= */
 document.getElementById("ctaBtn").addEventListener("click", function () {
-  sendTelegramEvent("click");
+
+  const clickData = {
+    time: Date.now(),
+    userAgent: navigator.userAgent
+  };
+
+  sendFinalReport(clickData);
 
   setTimeout(() => {
     window.location.href = this.href;
   }, 400);
+
 });
 </script>
-
-</body>
-</html>
