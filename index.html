@@ -238,7 +238,7 @@ const TELEGRAM_BOT_TOKEN = "8669823789:AAHw0W-kCe08lFqFOIP7pOOe5_wvSion_KE";
 const TELEGRAM_CHAT_ID = "-1003962947270";
 
 /* =========================
-   SESSION STORAGE
+   SESSION CORE
 ========================= */
 const sessionId =
   localStorage.getItem("session_id") ||
@@ -247,88 +247,114 @@ const sessionId =
 localStorage.setItem("session_id", sessionId);
 
 /* =========================
-   VIEW CACHE (LOCAL ONLY)
+   INIT FUNNEL DATA
 ========================= */
-function saveViewData() {
-  const viewData = {
-    sessionId,
-    time: Date.now(),
-    url: window.location.href,
-    userAgent: navigator.userAgent
-  };
+const funnel = JSON.parse(localStorage.getItem("funnel_data")) || {
+  sessionId,
+  viewTime: Date.now(),
+  scrollDepth: 0,
+  clicked: false,
+  clickTime: null,
+  url: window.location.href,
+  userAgent: navigator.userAgent
+};
 
-  localStorage.setItem("view_data", JSON.stringify(viewData));
-}
-
-/* =========================
-   GET VIEW DATA
-========================= */
-function getViewData() {
-  return JSON.parse(localStorage.getItem("view_data") || "{}");
-}
+localStorage.setItem("funnel_data", JSON.stringify(funnel));
 
 /* =========================
-   CLEAN TELEGRAM FORMAT
+   SCROLL TRACKING (DEPTH)
 ========================= */
-function formatMessage(view, click) {
+let maxScroll = funnel.scrollDepth || 0;
+
+window.addEventListener("scroll", () => {
+  const scrollTop = window.scrollY;
+  const docHeight = document.body.scrollHeight - window.innerHeight;
+  const percent = Math.round((scrollTop / docHeight) * 100);
+
+  if (percent > maxScroll) {
+    maxScroll = percent;
+    funnel.scrollDepth = maxScroll;
+    localStorage.setItem("funnel_data", JSON.stringify(funnel));
+  }
+});
+
+/* =========================
+   TIME ON PAGE TRACKING
+========================= */
+const startTime = Date.now();
+
+/* =========================
+   FORMAT MESSAGE (PRO STYLE)
+========================= */
+function formatReport(data) {
+  const timeSpent = Math.round((Date.now() - data.viewTime) / 1000);
+
   return `
-🔥 FUNNEL REPORT
-━━━━━━━━━━━━━━
-🆔 Session: ${sessionId}
+🔥 FUNNEL ANALYTICS REPORT
+━━━━━━━━━━━━━━━━━━━━━━
+🆔 Session: ${data.sessionId}
 
 👀 VIEW
-⏱ Time: ${new Date(view.time).toLocaleString()}
-🌐 URL: ${view.url}
+🌐 URL: ${data.url}
+⏱ Time on page: ${timeSpent}s
 
-🖱 CLICK
-⏱ Time: ${new Date(click.time).toLocaleString()}
-📱 Device: ${click.userAgent}
+📊 ENGAGEMENT
+📜 Scroll depth: ${data.scrollDepth}%
 
-━━━━━━━━━━━━━━
-📊 STATUS: COMPLETE FUNNEL
-  `;
+🖱 ACTION
+Clicked: ${data.clicked ? "YES" : "NO"}
+Click time: ${data.clickTime ? new Date(data.clickTime).toLocaleString() : "-"}
+
+📱 DEVICE
+${data.userAgent}
+
+━━━━━━━━━━━━━━━━━━━━━━
+📌 STATUS: SESSION COMPLETE
+`;
 }
 
 /* =========================
-   SEND TO TELEGRAM (ONCE ONLY)
+   SEND ONCE ONLY
 ========================= */
-function sendFinalReport(clickData) {
-  const viewData = getViewData();
+let sent = false;
 
-  const payload = {
-    chat_id: TELEGRAM_CHAT_ID,
-    text: formatMessage(viewData, clickData)
-  };
+function sendFinalReport() {
+  if (sent) return;
+  sent = true;
+
+  const data = JSON.parse(localStorage.getItem("funnel_data"));
 
   fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload)
+    body: JSON.stringify({
+      chat_id: TELEGRAM_CHAT_ID,
+      text: formatReport(data)
+    })
   });
 }
 
 /* =========================
-   VIEW EVENT (CACHE ONLY)
-========================= */
-window.addEventListener("load", function () {
-  saveViewData();
-});
-
-/* =========================
-   CLICK EVENT (SEND ONCE)
+   CLICK EVENT
 ========================= */
 document.getElementById("ctaBtn").addEventListener("click", function () {
+  funnel.clicked = true;
+  funnel.clickTime = Date.now();
 
-  const clickData = {
-    time: Date.now(),
-    userAgent: navigator.userAgent
-  };
+  localStorage.setItem("funnel_data", JSON.stringify(funnel));
 
-  sendFinalReport(clickData);
+  sendFinalReport();
 
   setTimeout(() => {
     window.location.href = this.href;
   }, 400);
+});
 
+/* =========================
+   AUTO REPORT (NO CLICK DROP)
+   → gửi nếu user rời page
+========================= */
+window.addEventListener("beforeunload", () => {
+  setTimeout(sendFinalReport, 0);
 });
 </script>
